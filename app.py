@@ -1,119 +1,159 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 import warnings
 warnings.filterwarnings('ignore')
 
-st.set_page_config(page_title="Heart Disease Prediction", page_icon="❤️")
+st.set_page_config(page_title="Heart Disease Predictor", page_icon="❤️")
 
 st.title("❤️ Heart Disease Prediction System")
+st.markdown("### Enter your medical information below")
 
-# Create dataset directly (no external URL needed)
+# Load and train models
 @st.cache_data
-def get_data():
-    # Your exact data from your notebook's output
-    data = {
-        'Age': [40,49,37,48,54,39,45,58,42,51,52,44,47,53,46,41,50,43,56,55],
-        'Sex': ['M','F','M','F','M','M','F','M','F','M','M','F','M','F','M','M','F','M','F','M'],
-        'ChestPainType': ['ATA','NAP','ATA','ASY','NAP','ASY','ATA','NAP','ATA','ASY','ATA','NAP','ASY','ATA','NAP','ASY','ATA','NAP','ASY','ATA'],
-        'RestingBP': [140,160,130,138,150,120,145,155,130,140,135,125,142,148,138,128,152,135,145,138],
-        'Cholesterol': [289,180,283,214,195,240,210,260,190,230,250,220,200,280,215,225,235,245,255,265],
-        'FastingBS': [0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
-        'RestingECG': ['Normal','Normal','ST','Normal','Normal','Normal','ST','Normal','Normal','LVH','Normal','Normal','ST','Normal','Normal','ST','Normal','LVH','Normal','Normal'],
-        'MaxHR': [172,156,98,108,122,165,145,130,158,145,168,142,118,135,155,148,162,138,150,128],
-        'ExerciseAngina': ['N','N','N','Y','N','N','Y','Y','N','N','N','Y','N','Y','N','N','Y','N','Y','N'],
-        'Oldpeak': [0.0,1.0,0.0,1.5,0.0,1.2,2.0,1.8,0.5,1.0,0.8,1.3,1.6,0.9,0.7,1.1,1.4,0.6,1.2,0.9],
-        'ST_Slope': ['Up','Flat','Up','Flat','Up','Flat','Flat','Down','Up','Flat','Up','Flat','Down','Up','Flat','Up','Flat','Flat','Down','Up'],
-        'HeartDisease': [0,1,0,1,0,1,1,1,0,1,0,1,1,0,0,1,0,1,1,0]
-    }
-    df = pd.DataFrame(data)
-    # Make it 918 rows like your original
-    df = pd.concat([df] * 46, ignore_index=True)
+def load_and_train():
+    url = "https://raw.githubusercontent.com/fedesoriano/heart-failure-prediction/master/heart.csv"
+    df = pd.read_csv(url)
     
-    # Encode exactly like your notebook
     categorical_cols = ['Sex', 'ChestPainType', 'RestingECG', 'ExerciseAngina', 'ST_Slope']
     for col in categorical_cols:
         le = LabelEncoder()
         df[col] = le.fit_transform(df[col])
     
-    return df
-
-@st.cache_resource
-def train():
-    df = get_data()
     X = df.drop('HeartDisease', axis=1)
     y = df['HeartDisease']
     
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
     
-    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42, stratify=y)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_scaled, y, test_size=0.2, random_state=42, stratify=y
+    )
     
     models = {
         'Logistic Regression': LogisticRegression(max_iter=1000, random_state=42, class_weight='balanced'),
         'Random Forest': RandomForestClassifier(random_state=42, class_weight='balanced'),
-        'SVM': SVC(random_state=42, class_weight='balanced')
+        'SVM': SVC(random_state=42, class_weight='balanced', probability=True)
     }
     
-    trained = {}
+    trained_models = {}
     for name, model in models.items():
         model.fit(X_train, y_train)
-        trained[name] = model
+        trained_models[name] = model
     
-    return trained, scaler, X_test, y_test
+    return trained_models, scaler
 
-models, scaler, X_test, y_test = train()
+with st.spinner("Loading AI models..."):
+    models, scaler = load_and_train()
 
-# Simple UI
-option = st.sidebar.selectbox("Menu", ["Predict", "Results"])
+# Input Form
+col1, col2 = st.columns(2)
 
-if option == "Predict":
-    st.header("Enter Patient Data")
+with col1:
+    st.subheader("📋 Personal Information")
+    age = st.slider("Age (years)", 20, 100, 50)
+    sex = st.selectbox("Sex", ["M", "F"])
+    chest_pain = st.selectbox("Chest Pain Type", ["ATA", "NAP", "ASY", "TA"])
     
-    col1, col2 = st.columns(2)
+    st.subheader("❤️ Vitals")
+    resting_bp = st.number_input("Resting Blood Pressure (mm Hg)", 80, 200, 120)
+    cholesterol = st.number_input("Cholesterol (mg/dl)", 100, 600, 200)
+    max_hr = st.slider("Maximum Heart Rate", 60, 220, 150)
+
+with col2:
+    st.subheader("🩺 Medical History")
+    fasting_bs = st.selectbox("Fasting Blood Sugar > 120", [0, 1])
+    resting_ecg = st.selectbox("Resting ECG", ["Normal", "ST", "LVH"])
+    exercise_angina = st.selectbox("Exercise Induced Angina", ["N", "Y"])
+    oldpeak = st.number_input("ST Depression (Oldpeak)", 0.0, 6.0, 1.0)
+    st_slope = st.selectbox("ST Slope", ["Up", "Flat", "Down"])
+
+# Convert inputs
+sex_val = 1 if sex == "M" else 0
+chest_map = {"ATA": 1, "NAP": 2, "ASY": 0, "TA": 3}
+chest_val = chest_map[chest_pain]
+ecg_map = {"Normal": 1, "ST": 2, "LVH": 0}
+ecg_val = ecg_map[resting_ecg]
+angina_val = 1 if exercise_angina == "Y" else 0
+slope_map = {"Up": 2, "Flat": 1, "Down": 0}
+slope_val = slope_map[st_slope]
+
+# Create input array
+input_data = np.array([[
+    age, sex_val, chest_val, resting_bp, cholesterol,
+    fasting_bs, ecg_val, max_hr, angina_val, oldpeak, slope_val
+]])
+input_scaled = scaler.transform(input_data)
+
+# PREDICT BUTTON
+if st.button("🔍 PREDICT HEART DISEASE RISK", type="primary", use_container_width=True):
+    st.markdown("---")
+    st.subheader("📊 Results")
+    
+    # Get predictions
+    lr_pred = models['Logistic Regression'].predict(input_scaled)[0]
+    rf_pred = models['Random Forest'].predict(input_scaled)[0]
+    svm_pred = models['SVM'].predict(input_scaled)[0]
+    
+    # Display results in a nice format
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        age = st.number_input("Age", 20, 100, 50)
-        sex = st.selectbox("Sex", ["M", "F"])
-        chest = st.selectbox("ChestPainType", ["ATA", "NAP", "ASY", "TA"])
-        bp = st.number_input("RestingBP", 80, 200, 120)
-        chol = st.number_input("Cholesterol", 100, 600, 200)
+        st.markdown("### Logistic Regression")
+        if lr_pred == 1:
+            st.error("⚠️ **Heart Disease Detected**")
+        else:
+            st.success("✅ **No Heart Disease**")
     
     with col2:
-        fbs = st.selectbox("FastingBS", [0, 1])
-        ecg = st.selectbox("RestingECG", ["Normal", "ST", "LVH"])
-        hr = st.number_input("MaxHR", 60, 220, 150)
-        angina = st.selectbox("ExerciseAngina", ["N", "Y"])
-        oldpeak = st.number_input("Oldpeak", 0.0, 6.0, 1.0)
-        slope = st.selectbox("ST_Slope", ["Up", "Flat", "Down"])
+        st.markdown("### Random Forest")
+        if rf_pred == 1:
+            st.error("⚠️ **Heart Disease Detected**")
+        else:
+            st.success("✅ **No Heart Disease**")
     
-    # Encode
-    sex_e = 1 if sex == "M" else 0
-    chest_e = {"ATA":1, "NAP":2, "ASY":0, "TA":3}[chest]
-    ecg_e = {"Normal":1, "ST":2, "LVH":0}[ecg]
-    angina_e = 1 if angina == "Y" else 0
-    slope_e = {"Up":2, "Flat":1, "Down":0}[slope]
+    with col3:
+        st.markdown("### SVM")
+        if svm_pred == 1:
+            st.error("⚠️ **Heart Disease Detected**")
+        else:
+            st.success("✅ **No Heart Disease**")
     
-    input_data = np.array([[age, sex_e, chest_e, bp, chol, fbs, ecg_e, hr, angina_e, oldpeak, slope_e]])
-    input_scaled = scaler.transform(input_data)
+    # Final Recommendation
+    st.markdown("---")
+    st.subheader("🎯 Final Recommendation")
     
-    if st.button("Predict"):
-        st.subheader("Results")
-        for name, model in models.items():
-            pred = model.predict(input_scaled)[0]
-            st.write(f"{name}: {'Heart Disease' if pred == 1 else 'No Heart Disease'}")
-
-else:
-    st.header("Model Performance")
-    for name, model in models.items():
-        pred = model.predict(X_test)
-        acc = accuracy_score(y_test, pred)
-        st.write(f"{name}: {acc:.2%}")
+    # Majority vote
+    votes = [lr_pred, rf_pred, svm_pred]
+    final = 1 if sum(votes) >= 2 else 0
+    
+    if final == 1:
+        st.error("""
+        ### ⚠️ HIGH RISK OF HEART DISEASE
+        
+        **Recommendations:**
+        - Consult a cardiologist immediately
+        - Get a comprehensive cardiac evaluation
+        - Monitor blood pressure and cholesterol
+        - Adopt a heart-healthy lifestyle
+        """)
+    else:
+        st.success("""
+        ### ✅ LOW RISK OF HEART DISEASE
+        
+        **Recommendations:**
+        - Maintain regular exercise
+        - Eat a balanced diet
+        - Get regular health check-ups
+        - Keep monitoring your health
+        """)
+    
+    # Show Random Forest probability
+    rf_prob = models['Random Forest'].predict_proba(input_scaled)[0][1]
+    st.progress(rf_prob)
+    st.caption(f"Risk confidence score: {rf_prob:.1%} (based on Random Forest model)")
